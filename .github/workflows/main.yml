@@ -1,0 +1,43 @@
+name: Deploy To AWS
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  # This job runs for every push on all branches
+  build-and-package:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Maven
+        run: chmod +x ./mvnw && ./mvnw -B package --file pom.xml
+
+      - name: Build with Docker
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u StasyanOi --password-stdin;
+          docker build . --file Dockerfile --tag ghcr.io/stasyanoi/new-project:latest
+          docker push ghcr.io/stasyanoi/new-project:latest
+
+  # This job runs only for the main branch pushes
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to AWS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          port: ${{ secrets.PORT }}
+          script: ./update.sh
